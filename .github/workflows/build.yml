@@ -1,0 +1,55 @@
+name: Build cross platform
+
+on:
+  push:
+    tags:
+      - 'b*'
+
+jobs:
+  build-win:
+    runs-on: ['windows-latest']
+
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: 3.11
+
+    - run: pip install -r ./app/requirements.txt pyinstaller
+    - run: pyinstaller --onefile --windowed --name "Salesman" app/main.py
+    - uses: actions/upload-artifact@v4
+      with:
+        path: dist/Salesman.exe
+        name: Salesman_win
+
+  build-lin:
+    runs-on: [ 'ubuntu-latest' ]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - run: pip install -r ./app/requirements.txt pyinstaller
+      - run: pyinstaller --onefile --windowed --name "Salesman" app/main.py
+      - uses: actions/upload-artifact@v4
+        with:
+          path: dist/Salesman
+          name: Salesman_lin
+
+  build-mac:
+    runs-on: ['macos-latest']
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: 3.11
+
+      - run: pip install -r ./app/requirements.txt pyinstaller pillow
+      - run: pyinstaller --onefile --windowed --name "Salesman" app/main.py
+      - uses: actions/upload-artifact@v4
+        with:
+          path: dist/*
+          name: macos
