@@ -21,7 +21,7 @@ from matplotlib.figure import Figure
 class Node:
     def __init__(self, matrix, path, level, path_cost, lower_bound, parent=None):
         self.matrix = matrix  # Текущая редуцированная матрица
-        self.path = path  # Текущий путь (список индексов городов, 0-based)
+        self.path = path  # Текущий путь
         self.level = level  # Уровень узла (количество посещённых городов)
         self.path_cost = path_cost  # Сумма путевых расходов
         self.lower_bound = lower_bound  # Сумма редукционных расходов
@@ -32,7 +32,7 @@ class Node:
         return self.total_cost < other.total_cost
 
 
-def reduce_matrix(matrix):
+def reduce_matrix_process(matrix):
     n = len(matrix)
     reduced_matrix = copy.deepcopy(matrix)
     reduction_cost = 0
@@ -75,14 +75,14 @@ def get_submatrix(matrix, i, j):
     return submatrix
 
 
-def solve_tsp(matrix):
+def solve_tsp_process(matrix):
     n = len(matrix)
-    initial_matrix, initial_reduction = reduce_matrix(matrix)
+    initial_matrix, initial_reduction = reduce_matrix_process(matrix)
     root = Node(matrix=initial_matrix, path=[0], level=0, path_cost=0, lower_bound=initial_reduction)
-    pq = []
+    pq = list()
     heapq.heappush(pq, root)
     best_cost = float('inf')
-    best_path = []
+    best_path = list()
     search_tree = nx.DiGraph()
 
     search_tree.add_node(tuple(root.path), label=' -> '.join(map(lambda x: str(x+1), root.path)))
@@ -101,25 +101,25 @@ def solve_tsp(matrix):
             continue
 
         current_city = current.path[-1]
-        for next_city in range(len(matrix)):
+        for next_city in range(n):
             if matrix[current_city][next_city] != float('inf') and next_city not in current.path:
                 new_path = current.path + [next_city]
                 new_path_cost = current.path_cost + matrix[current_city][next_city]
                 new_matrix = get_submatrix(current.matrix, current_city, next_city)
-                reduced_matrix, reduction_cost = reduce_matrix(new_matrix)
+                reduced_matrix, reduction_cost = reduce_matrix_process(new_matrix)
                 new_lower_bound = reduction_cost
                 total_cost = new_path_cost + new_lower_bound
 
                 if total_cost < best_cost:
-                    child = Node(matrix=new_matrix, path=new_path, level=current.level +1,
-                                path_cost=new_path_cost, lower_bound=new_lower_bound, parent=current)
+                    child = Node(matrix=new_matrix, path=new_path, level=current.level + 1,
+                                 path_cost=new_path_cost, lower_bound=new_lower_bound, parent=current)
                     heapq.heappush(pq, child)
                     search_tree.add_edge(tuple(current.path), tuple(child.path), weight=matrix[current_city][next_city])
-                    search_tree.nodes[tuple(child.path)]['label'] = ' -> '.join(map(lambda x: str(x+1), child.path))
-
+                    search_tree.nodes[tuple(child.path)]['label'] = ' -> '.join(map(lambda x: str(x + 1), child.path))
     if best_path:
         best_path = [city +1 for city in best_path]
     return best_path, best_cost, search_tree
+
 
 def hierarchical_layout(G):
     levels = {node:len(node) for node in G.nodes()}
@@ -136,9 +136,9 @@ def hierarchical_layout(G):
         nodes = level_dict[level]
         num_nodes = len(nodes)
         for i, node in enumerate(nodes):
-            x = i/(num_nodes-1) if num_nodes>1 else 0.5
+            x = i / (num_nodes-1) if num_nodes > 1 else 0.5
             y = -level
-            pos[node] = (x,y)
+            pos[node] = (x, y)
     return pos
 
 class MplCanvas(FigureCanvas):
@@ -227,8 +227,8 @@ class TSPWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Задача Коммивояжёра - Метод Ветвей и Границ")
-        self.setGeometry(100, 100, 1600, 900)  # Увеличение размера главного окна
-        self.search_tree = None  # Инициализация переменной для хранения дерева поиска
+        self.setGeometry(100, 100, 1600, 900)
+        self.search_tree = None
         self.initUI()
 
     def initUI(self):
@@ -236,10 +236,10 @@ class TSPWindow(QMainWindow):
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
 
-        # Основной вертикальный layout
+
         main_layout = QVBoxLayout()
 
-        # Верхняя часть: настройки матрицы
+
         settings_layout = QHBoxLayout()
 
         self.size_label = QLabel("Количество городов")
@@ -294,6 +294,12 @@ class TSPWindow(QMainWindow):
         self.save_condition_button.setEnabled(True)
         settings_layout.addWidget(self.save_condition_button)
 
+        self.load_and_solve_button = QPushButton("Загрузить из файла и сразу решить")
+        self.load_and_solve_button.clicked.connect(self.load_from_file_and_solve)
+        # Активируем когда матрица будет хоть чем-то заполнена
+        self.load_and_solve_button.setEnabled(True)
+        settings_layout.addWidget(self.load_and_solve_button)
+
         main_layout.addLayout(buttons_layout)
    # Разделение на две части: текстовые результаты и графы
         content_layout = QHBoxLayout()
@@ -320,7 +326,17 @@ class TSPWindow(QMainWindow):
 
         content_layout.addLayout(graphs_layout, 2)  # Увеличение пространства для графов
 
+
         main_layout.addLayout(content_layout)
+
+
+        footer_layout = QHBoxLayout()
+        footer_label = QLabel("<a href='https://github.com/DdaniilDev'>ddaniildev &copy; 2024</a>")
+        footer_label.setOpenExternalLinks(True)
+        footer_layout.addWidget(footer_label, alignment=Qt.AlignCenter)
+        main_layout.addLayout(footer_layout)
+
+
 
         central_widget.setLayout(main_layout)
 
@@ -351,7 +367,8 @@ class TSPWindow(QMainWindow):
             item.setFlags(Qt.ItemIsEnabled)  # Запрет редактирования диагональных ячеек
             self.table_widget.setItem(i, i, item)
         QMessageBox.information(self, "Матрица создана",
-                                f"Создана матрица {n}x{n}. Введите расстояния между городами.\nДиагональные элементы установлены в ∞.")
+                                f"Создана матрица {n}x{n}. Введите расстояния между городами.\nДиагональные элементы установлены в ∞.\n"
+                                f"X (вне диагонали) означает, что путь невозможен.")
 
     def fill_random_matrix(self):
         n = self.size_spinbox.value()
@@ -394,11 +411,17 @@ class TSPWindow(QMainWindow):
                         row[i] = float('inf')  # Диагональ должна быть ∞
                         matrix.append(row)
 
-                # Заполняем таблицу значениями из matrix
                 for i in range(n):
                     for j in range(n):
-                        val = "∞" if matrix[i][j] == float('inf') else str(matrix[i][j])
-                        item = QTableWidgetItem(val)
+                        val = matrix[i][j]
+                        if val == float('inf'):
+                            if i == j:
+                                cell_text = "∞"
+                            else:
+                                cell_text = "X"
+                        else:
+                            cell_text = str(val)
+                        item = QTableWidgetItem(cell_text)
                         if i == j:
                             item.setFlags(Qt.ItemIsEnabled)
                         self.table_widget.setItem(i, j, item)
@@ -408,19 +431,16 @@ class TSPWindow(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Ошибка загрузки", f"Произошла ошибка при загрузке матрицы:\n{str(e)}")
 
-
-
     def run_tsp_with_time(self):
         try:
             matrix = self.get_matrix_from_table()
-            start_time = time.perf_counter()  # Начало измерения времени
-            path, cost, search_tree = solve_tsp(matrix)
-            end_time = time.perf_counter()  # Конец измерения времени
-            elapsed_time = end_time - start_time  # Время выполнения
+            start_time = time.perf_counter()
+            path, cost, search_tree = solve_tsp_process(matrix)
+            end_time = time.perf_counter()
+            elapsed_time = end_time - start_time
 
-            self.search_tree = search_tree  # Сохраняем дерево поиска
+            self.search_tree = search_tree
 
-            # Вывод результатов
             if path:
                 path_str = ' -> '.join(map(str, path))
                 result_str = f"Оптимальный путь: {path_str}\nОбщая стоимость: {cost}\nВремя выполнения: {elapsed_time:.6f} секунд\n\n"
@@ -429,10 +449,8 @@ class TSPWindow(QMainWindow):
             result_str += "Граф оптимального пути доступен на графике."
             self.result_text.setText(result_str)
 
-            # Визуализация графа переходов
             self.plot_transition_graph(path, cost, matrix)
 
-            # Активируем кнопку для отображения дерева поиска
             self.show_tree_button.setEnabled(True)
             self.save_button.setEnabled(True)
 
@@ -453,19 +471,93 @@ class TSPWindow(QMainWindow):
                     continue
                 if item is None or item.text().strip() == "":
                     raise ValueError(f"Ячейка ({i + 1}, {j + 1}) пуста.")
-                text = item.text().strip()
-                if text.lower() in ['inf', 'infty', '∞']:
+                text = item.text().strip().lower()
+                if text in ['inf', '∞']:
+                    row.append(float('inf'))
+                elif text == 'x':
                     row.append(float('inf'))
                 else:
-                    try:
-                        value = float(text)
-                        if value < 0:
-                            raise ValueError(f"Расстояние не может быть отрицательным (ячейка ({i + 1}, {j + 1})).")
-                        row.append(value)
-                    except ValueError:
-                        raise ValueError(f"Некорректное значение в ячейке ({i + 1}, {j + 1}): '{text}'")
+                    v = float(text)
+                    if v < 0:
+                        raise ValueError(f"Отрицательное расстояние в ячейке ({i + 1}, {j + 1}) недопустимо.")
+                    row.append(v)
             matrix.append(row)
         return matrix
+
+    def load_from_file_and_solve(self):
+        n = self.size_spinbox.value()
+        if n < 6:
+            QMessageBox.warning(self, "Загрузка невозможна",
+                                "Количество городов должно быть больше пяти для загрузки из файла.")
+            return
+
+        options = QFileDialog.Options()
+        file_path, _ = QFileDialog.getOpenFileName(self, "Выберите файл с матрицей", "",
+                                                   "Text Files (*.txt);;All Files (*)", options=options)
+        if file_path:
+            try:
+                matrix = list()
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    lines = f.read().strip().split('\n')
+                    if len(lines) != n:
+                        raise ValueError("Число строк в файле не совпадает с размером матрицы.")
+                    for i, line in enumerate(lines):
+                        parts = line.strip().split()
+                        if len(parts) != n:
+                            raise ValueError(f"Число значений в строке {i + 1} не совпадает с размером матрицы.")
+                        row = []
+                        for val in parts:
+                            if val.lower() in ['inf', '∞']:
+                                row.append(float('inf'))
+                            else:
+                                v = float(val)
+                                if v < 0:
+                                    raise ValueError("Отрицательные расстояния недопустимы.")
+                                row.append(v)
+                        row[i] = float('inf')  # Диагональ должна быть ∞
+                        matrix.append(row)
+
+                # Заполняем таблицу значениями из matrix
+                for i in range(n):
+                    for j in range(n):
+                        val = matrix[i][j]
+                        if val == float('inf'):
+                            if i == j:
+                                cell_text = "∞"
+                            else:
+                                cell_text = "X"
+                        else:
+                            cell_text = str(val)
+                        item = QTableWidgetItem(cell_text)
+                        if i == j:
+                            item.setFlags(Qt.ItemIsEnabled)
+                        self.table_widget.setItem(i, j, item)
+
+                QMessageBox.information(self, "Успех", "Матрица успешно загружена из файла.")
+
+            except Exception as e:
+                QMessageBox.critical(self, "Ошибка загрузки", f"Произошла ошибка при загрузке матрицы:\n{str(e)}")
+
+        matrix = self.get_matrix_from_table()
+        start_time = time.perf_counter()
+        path, cost, search_tree = solve_tsp_process(matrix)
+        end_time = time.perf_counter()
+        elapsed_time = end_time - start_time
+
+        self.search_tree = search_tree
+
+        if path is not None:
+            path_str = ' -> '.join(map(str, path))
+            result_str = f"Оптимальный путь: {path_str}\nОбщая стоимость: {cost}\nВремя выполнения: {elapsed_time:.6f} секунд\n\n"
+        else:
+            result_str = "Не найден оптимальный путь.\n\n"
+        result_str += "Граф оптимального пути доступен на графике."
+        self.result_text.setText(result_str)
+
+        self.plot_transition_graph(path, cost, matrix)
+
+        self.show_tree_button.setEnabled(True)
+        self.save_button.setEnabled(True)
 
     def plot_transition_graph(self, path, cost, matrix):
         self.transition_canvas.fig.clf()
@@ -552,7 +644,10 @@ class TSPWindow(QMainWindow):
                         for j in range(n):
                             val = matrix[i][j]
                             if val == float('inf'):
-                                row_str.append("∞")
+                                if i == j:
+                                    row_str.append("∞")
+                                else:
+                                    row_str.append("X")
                             else:
                                 row_str.append(str(val))
                         f.write(" ".join(row_str) + "\n")
